@@ -26,18 +26,23 @@ DATA_PATH = r"scraping_projects.csv"
 OUTPUT_PATH = r""
 DATABASE = os.path.join(OUTPUT_PATH, "new_projects.db")
 # Chromedriver path
-CHROMEDRIVER_PATH = r"chromedriver.exe"
+# CHROMEDRIVER_PATH = r"chromedriver.exe" # TODO: Remove this line when deploying on server. Used chrome options
+
+# Configure undetected-chromedriver to manage ChromeDriver
+options = uc.ChromeOptions()
+# options.add_argument('--headless')  TODO: # Optional: Run Chrome in headless mode when extracting project
+# driver = uc.Chrome(options=options, automatically_update=True)
 
 # Set logging.
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO, datefmt='%m/%d/%Y %I:%M:%S %p')
 # Set what value to enter in case of missing data. Default is ""
 MISSING = ""
 # Set to True if Testing and False otherwise.
-TESTING = 0
+TESTING = 1
 # Number of processes per try.
-chunk_size = 20
+chunk_size = 4
 # Proton vpn windows taskbar location.
-icon_num = 3 
+icon_num = 1
 
 pyautogui.FAILSAFE = False
 
@@ -82,17 +87,24 @@ def main():
 def test_extract_campaign_data():
     # Testing code.
     file_paths = [
-                #"https://www.kickstarter.com/projects/petersand/manylabs-sensors-for-students", 
+                # "https://www.kickstarter.com/projects/petersand/manylabs-sensors-for-students", 
                 #   "https://www.kickstarter.com/projects/hellodawnco/pokeballoons-evolution-edition",
                 #   "https://www.kickstarter.com/projects/lucid-dreamers/empires-of-sorcery",
                 #   "https://www.kickstarter.com/projects/larianstudios/divinity-original-sin-the-board-game",
                 #   "https://www.kickstarter.com/projects/120302834/deep-rock-galactic-space-rig-and-biome-expansions",
                 #   "https://www.kickstarter.com/projects/ogglio/2023-olive-oil-harvest/",
                 #   "https://www.kickstarter.com/projects/artorder/2018-snowman-greeting-card-collection/",
-                  "https://www.kickstarter.com/projects/732431717/photo-time-machine",
+                #   "https://www.kickstarter.com/projects/732431717/photo-time-machine",
+                "https://www.kickstarter.com/projects/perry/video-chat-at-35000-feet"
                   ]
-
-    pool = multiprocessing.Pool()
+    # Get the number of CPU cores
+    num_cores = multiprocessing.cpu_count()
+    if num_cores > len(file_paths):
+        pool = multiprocessing.Pool(len(file_paths))
+    else:
+        pool = multiprocessing.Pool()
+    if not file_paths:
+        print ("No file paths")
     data = pool.map(extract_campaign_data, file_paths)
     pool.close()
     pool.join()
@@ -134,7 +146,7 @@ def click_random(icon_num, wait=True):
     connects and otherwise it will not sleep. True by default.
     """
     pyautogui.hotkey('win', str(icon_num))
-    pyautogui.click(333, 563, clicks=3, interval=0.15)
+    pyautogui.click(1055, 444, clicks=2, interval=0.5)
     time.sleep(2)
     pyautogui.hotkey('alt', 'tab')
     if wait:
@@ -400,7 +412,9 @@ def get_live_soup(link, given_driver=None, page=None):
     given_driver [selenium webdriver] - A webdriver. None by default.
     page [str] - Additional behavior depending on page type."""
     if given_driver == None:
-        driver = uc.Chrome(driver_executable_path=CHROMEDRIVER_PATH)
+        # driver = uc.Chrome(driver_executable_path=CHROMEDRIVER_PATH) TODO: remove
+        driver = uc.Chrome(options=options, automatically_update=True)
+
     else:
         driver = given_driver
     driver.get(link)
@@ -481,7 +495,9 @@ def extract_campaign_data(path, conversion_rate=1):
     conversion_rate[int] - Conversion rate to use for pledges. 1 by default."""
     data = {"rd_project_link": path}
     
-    driver = uc.Chrome(driver_executable_path=CHROMEDRIVER_PATH, user_multi_procs=True)
+    # driver = uc.Chrome(driver_executable_path=CHROMEDRIVER_PATH, user_multi_procs=True) TODO: remove
+    driver = uc.Chrome(options=options, user_multi_procs=True, automatically_update=True)
+
     campaign_soup = get_live_soup(path, given_driver=driver, page="campaign")
 
     # There is an issue with the campaign.
