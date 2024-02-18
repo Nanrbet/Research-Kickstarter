@@ -8,6 +8,8 @@ import winsound
 import sqlite3
 import os
 import csv
+import random
+import traceback
 
 import undetected_chromedriver as uc
 from selenium.common.exceptions import TimeoutException
@@ -21,17 +23,12 @@ import pandas as pd
 # Settings.
 
 # Path to project data. Make sure to use raw strings or escape "\".
-DATA_PATH = r"scraping_projects.csv"
+DATA_PATH = r"scraping_projects10.csv"
 # Output path.
 OUTPUT_PATH = r""
 DATABASE = os.path.join(OUTPUT_PATH, "new_projects.db")
 # Chromedriver path
-# CHROMEDRIVER_PATH = r"chromedriver.exe" # TODO: Remove this line when deploying on server. Used chrome options
-
-# Configure undetected-chromedriver to manage ChromeDriver
 options = uc.ChromeOptions()
-# options.add_argument('--headless')  TODO: # Optional: Run Chrome in headless mode when extracting project
-# driver = uc.Chrome(options=options, automatically_update=True)
 
 # Set logging.
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO, datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -63,9 +60,21 @@ def main():
     Done = False
     while not Done:
         # Get at maximum chunk_size number rows as a list per iteration.
-        rows = get_rows(reader, DATABASE, chunk_size)
+        rows = get_rows(reader, DATABASE, chunk_size) 
 
-        pool.map(scrape_write, rows)
+        try:
+            pool.map(scrape_write, rows)
+        except Exception:
+            logging.info(f"\nException -\n {traceback.format_exc()} \nRetrying...")
+
+            # Reopen reader so unscraped rows will get added in next iteration.
+            f_obj.close()
+            f_obj = open(DATA_PATH, encoding="utf8", newline='')
+            reader = csv.DictReader(f_obj)
+
+            click_random(icon_num)
+            time.sleep(30)
+
         # Scraping complete since there aren't enough rows left to reach chunk_size.
         if len(rows) < chunk_size:
             Done = True
@@ -74,7 +83,7 @@ def main():
         
         # Stop scraping for a period of time to not be blocked as a bot.
         total += chunk_size
-        if total % (chunk_size * 1) == 0:
+        if total % (chunk_size * 3) == 0:
             logging.info("Changing server...\n")
             click_random(icon_num)
 
@@ -87,24 +96,17 @@ def main():
 def test_extract_campaign_data():
     # Testing code.
     file_paths = [
-                # "https://www.kickstarter.com/projects/petersand/manylabs-sensors-for-students", 
+                #"https://www.kickstarter.com/projects/petersand/manylabs-sensors-for-students", 
                 #   "https://www.kickstarter.com/projects/hellodawnco/pokeballoons-evolution-edition",
                 #   "https://www.kickstarter.com/projects/lucid-dreamers/empires-of-sorcery",
                 #   "https://www.kickstarter.com/projects/larianstudios/divinity-original-sin-the-board-game",
                 #   "https://www.kickstarter.com/projects/120302834/deep-rock-galactic-space-rig-and-biome-expansions",
                 #   "https://www.kickstarter.com/projects/ogglio/2023-olive-oil-harvest/",
                 #   "https://www.kickstarter.com/projects/artorder/2018-snowman-greeting-card-collection/",
-                #   "https://www.kickstarter.com/projects/732431717/photo-time-machine",
-                "https://www.kickstarter.com/projects/perry/video-chat-at-35000-feet"
+                  "https://www.kickstarter.com/projects/732431717/photo-time-machine",
                   ]
-    # Get the number of CPU cores
-    num_cores = multiprocessing.cpu_count()
-    if num_cores > len(file_paths):
-        pool = multiprocessing.Pool(len(file_paths))
-    else:
-        pool = multiprocessing.Pool()
-    if not file_paths:
-        print ("No file paths")
+
+    pool = multiprocessing.Pool()
     data = pool.map(extract_campaign_data, file_paths)
     pool.close()
     pool.join()
@@ -146,7 +148,7 @@ def click_random(icon_num, wait=True):
     connects and otherwise it will not sleep. True by default.
     """
     pyautogui.hotkey('win', str(icon_num))
-    pyautogui.click(1055, 444, clicks=2, interval=0.5)
+    pyautogui.click(333, 563, clicks=3, interval=0.15)
     time.sleep(2)
     pyautogui.hotkey('alt', 'tab')
     if wait:
@@ -412,9 +414,7 @@ def get_live_soup(link, given_driver=None, page=None):
     given_driver [selenium webdriver] - A webdriver. None by default.
     page [str] - Additional behavior depending on page type."""
     if given_driver == None:
-        # driver = uc.Chrome(driver_executable_path=CHROMEDRIVER_PATH) TODO: remove
-        driver = uc.Chrome(options=options, automatically_update=True)
-
+        driver = uc.Chrome(driver_executable_path=CHROMEDRIVER_PATH)
     else:
         driver = given_driver
     driver.get(link)
@@ -433,7 +433,7 @@ def get_live_soup(link, given_driver=None, page=None):
                 elems.extend(driver.find_elements(By.CSS_SELECTOR, 'div[class="do-not-visually-track text-left type-16 bold clip text-ellipsis"]'))
                 try:
                     elems[0].click()
-                    time.sleep(5)
+                    time.sleep(random.uniform(3, 7))
                 except Exception:
                     driver.refresh()
                     tries -= 1
@@ -495,17 +495,20 @@ def extract_campaign_data(path, conversion_rate=1):
     conversion_rate[int] - Conversion rate to use for pledges. 1 by default."""
     data = {"rd_project_link": path}
     
-    # driver = uc.Chrome(driver_executable_path=CHROMEDRIVER_PATH, user_multi_procs=True) TODO: remove
-    driver = uc.Chrome(options=options, user_multi_procs=True, automatically_update=True)
+    try:
+        driver = uc.Chrome(driver_executable_path=CHROMEDRIVER_PATH, user_multi_procs=True, headless=True, version_main=117)
+        campaign_soup = get_live_soup(path, given_driver=driver, page="campaign")
 
-    campaign_soup = get_live_soup(path, given_driver=driver, page="campaign")
-
-    # There is an issue with the campaign.
-    if campaign_soup == None:
-        return
-    
-    reward_soup = get_live_soup(path + "/rewards", given_driver=driver, page="rewards")
-    driver.quit()
+        # Campaign is hidden.
+        if campaign_soup == None:
+            return
+        
+        reward_soup = get_live_soup(path + "/rewards", given_driver=driver, page="rewards")
+        
+    except Exception:
+        raise Exception
+    finally:
+        driver.quit()
 
     # Prepare str for getting date and time. 
     path = datetime.now().strftime('_%Y%m%d-%H%M%S.html')
@@ -732,7 +735,7 @@ def scrape_write(row):
 
     if project_data != None:
         # Merge data.
-        start_date = datetime.strptime(row["created_date"], "%Y-%m-%d")
+        start_date = datetime.strptime(row["launched_date"], "%Y-%m-%d")
         end_date = datetime.strptime(row["deadline_date"], "%Y-%m-%d")
         duration = (end_date - start_date).days
 
