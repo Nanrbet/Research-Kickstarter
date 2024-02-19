@@ -12,13 +12,14 @@ import random
 import traceback
 
 import undetected_chromedriver as uc
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 import pyautogui
 from bs4 import BeautifulSoup
 import pandas as pd
+
 
 # Settings.
 
@@ -28,7 +29,9 @@ DATA_PATH = r"scraping_projects10.csv"
 OUTPUT_PATH = r""
 DATABASE = os.path.join(OUTPUT_PATH, "new_projects.db")
 # Chromedriver path
-options = uc.ChromeOptions()
+DRIVER_PATH="C:/Users/Admin/Downloads/jaber-2024_02_04-001/jaber/chromedriver-win64/chromedriver-win64/chromedriver.exe"
+# Chrome browser path
+# BROWSER_PATH="C:/Users/Admin/Downloads/jaber-2024_02_04-001/jaber/chrome-win64/chrome-win64/chrome.exe"
 
 # Set logging.
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO, datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -37,7 +40,7 @@ MISSING = ""
 # Set to True if Testing and False otherwise.
 TESTING = 1
 # Number of processes per try.
-chunk_size = 4
+chunk_size = 1
 # Proton vpn windows taskbar location.
 icon_num = 1
 
@@ -103,16 +106,32 @@ def test_extract_campaign_data():
                 #   "https://www.kickstarter.com/projects/120302834/deep-rock-galactic-space-rig-and-biome-expansions",
                 #   "https://www.kickstarter.com/projects/ogglio/2023-olive-oil-harvest/",
                 #   "https://www.kickstarter.com/projects/artorder/2018-snowman-greeting-card-collection/",
-                  "https://www.kickstarter.com/projects/732431717/photo-time-machine",
+                #   "https://www.kickstarter.com/projects/732431717/photo-time-machine",
+                #   "https://www.kickstarter.com/projects/perry/video-chat-at-35000-feet",
+                  "https://www.kickstarter.com/projects/perry/grace-jones-does-not-give-a-f-t-shirt-limited-edition-0",
+                #   "https://www.kickstarter.com/projects/lucid-dreamers/empires-of-sorcery",
+                #   "https://www.kickstarter.com/projects/Samplefreq/crowdsource-a-musical-adventure"
+
                   ]
+    if file_paths is not None:
+        # pool = multiprocessing.Pool(processes=1) # TODO: remove processes
+        # data = pool.map(extract_campaign_data, file_paths)
+        # Set the number of processes to a perfect quotient of the number of file paths and the desired chunk size
+        # chunksize = 1
+        # processes = (len(file_paths) // chunksize) + (len(file_paths) % chunksize > 0)
+        # print(str(processes), str(chunksize))
+        # pool = multiprocessing.Pool(processes=processes)
+        # data = pool.map(extract_campaign_data, file_paths, chunksize=chunksize)
+        
+        # pool.close()
+        # pool.join()
+        for path in file_paths:
+            data = extract_campaign_data(path)
 
-    pool = multiprocessing.Pool()
-    data = pool.map(extract_campaign_data, file_paths)
-    pool.close()
-    pool.join()
-
-    df = pd.DataFrame(data)
-    df.to_csv('test.csv', index = False)
+        df = pd.DataFrame(data)
+        df.to_csv('test.csv', index = False)
+    else: 
+        print("file_paths is empty")
 
 def get_rows(reader, database, n_rows):
     """Returns n rows from csv reader while making sure they weren't already scraped by checking in database."""
@@ -414,9 +433,12 @@ def get_live_soup(link, given_driver=None, page=None):
     given_driver [selenium webdriver] - A webdriver. None by default.
     page [str] - Additional behavior depending on page type."""
     if given_driver == None:
-        driver = uc.Chrome(driver_executable_path=CHROMEDRIVER_PATH)
+        driver = uc.Chrome(driver_executable_path=DRIVER_PATH, parse_with_lxml=True)
+        
     else:
         driver = given_driver
+    print(driver.get(link))
+    
     driver.get(link)
 
     # Click creator page for page to load additional data if it is a campaign page.
@@ -494,9 +516,9 @@ def extract_campaign_data(path, conversion_rate=1):
     path [str] - Path to html file.
     conversion_rate[int] - Conversion rate to use for pledges. 1 by default."""
     data = {"rd_project_link": path}
-    
+    driver = None
     try:
-        driver = uc.Chrome(driver_executable_path=CHROMEDRIVER_PATH, user_multi_procs=True, headless=True, version_main=117)
+        driver = uc.Chrome(driver_executable_path=DRIVER_PATH, parse_with_lxml=True)
         campaign_soup = get_live_soup(path, given_driver=driver, page="campaign")
 
         # Campaign is hidden.
@@ -505,10 +527,12 @@ def extract_campaign_data(path, conversion_rate=1):
         
         reward_soup = get_live_soup(path + "/rewards", given_driver=driver, page="rewards")
         
-    except Exception:
-        raise Exception
+    except WebDriverException as e:
+        print(f"Error creating WebDriver from extract_campaign_data: {e}")
+    
     finally:
-        driver.quit()
+        if driver:
+            driver.quit()
 
     # Prepare str for getting date and time. 
     path = datetime.now().strftime('_%Y%m%d-%H%M%S.html')
