@@ -24,7 +24,7 @@ import pandas as pd
 # Settings.
 
 # Path to project data. Make sure to use raw strings or escape "\".
-DATA_PATH = r"scraping_projects10.csv"
+DATA_PATH = r"scraping_projects.csv"
 # Output path.
 OUTPUT_PATH = r""
 DATABASE = os.path.join(OUTPUT_PATH, "new_projects.db")
@@ -33,6 +33,11 @@ DRIVER_PATH="C:/Users/Admin/Downloads/jaber-2024_02_04-001/jaber/chromedriver-wi
 # Chrome browser path
 # BROWSER_PATH="C:/Users/Admin/Downloads/jaber-2024_02_04-001/jaber/chrome-win64/chrome-win64/chrome.exe"
 
+# chrome_options.add_argument("--disable-gpu")
+# chrome_options.add_argument("user-agent=Your_User_Agent_String")
+
+# ua = UserAgent()
+
 # Set logging.
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO, datefmt='%m/%d/%Y %I:%M:%S %p')
 # Set what value to enter in case of missing data. Default is ""
@@ -40,7 +45,7 @@ MISSING = ""
 # Set to True if Testing and False otherwise.
 TESTING = 1
 # Number of processes per try.
-chunk_size = 1
+chunk_size = 4
 # Proton vpn windows taskbar location.
 icon_num = 1
 
@@ -107,26 +112,21 @@ def test_extract_campaign_data():
                 #   "https://www.kickstarter.com/projects/ogglio/2023-olive-oil-harvest/",
                 #   "https://www.kickstarter.com/projects/artorder/2018-snowman-greeting-card-collection/",
                 #   "https://www.kickstarter.com/projects/732431717/photo-time-machine",
-                #   "https://www.kickstarter.com/projects/perry/video-chat-at-35000-feet",
-                  "https://www.kickstarter.com/projects/perry/grace-jones-does-not-give-a-f-t-shirt-limited-edition-0",
+                  "https://www.kickstarter.com/projects/perry/video-chat-at-35000-feet",
+                #   "https://www.kickstarter.com/projects/perry/grace-jones-does-not-give-a-f-t-shirt-limited-edition-0",
                 #   "https://www.kickstarter.com/projects/lucid-dreamers/empires-of-sorcery",
                 #   "https://www.kickstarter.com/projects/Samplefreq/crowdsource-a-musical-adventure"
 
                   ]
     if file_paths is not None:
-        # pool = multiprocessing.Pool(processes=1) # TODO: remove processes
-        # data = pool.map(extract_campaign_data, file_paths)
-        # Set the number of processes to a perfect quotient of the number of file paths and the desired chunk size
-        # chunksize = 1
-        # processes = (len(file_paths) // chunksize) + (len(file_paths) % chunksize > 0)
-        # print(str(processes), str(chunksize))
-        # pool = multiprocessing.Pool(processes=processes)
-        # data = pool.map(extract_campaign_data, file_paths, chunksize=chunksize)
+        pool = multiprocessing.Pool(processes=1) # TODO: remove processes
+        # pool = multiprocessing.Pool()
+        data = pool.map(extract_campaign_data, file_paths)
         
-        # pool.close()
-        # pool.join()
-        for path in file_paths:
-            data = extract_campaign_data(path)
+        pool.close()
+        pool.join()
+        # for path in file_paths:
+        #     data = extract_campaign_data(path)
 
         df = pd.DataFrame(data)
         df.to_csv('test.csv', index = False)
@@ -167,11 +167,11 @@ def click_random(icon_num, wait=True):
     connects and otherwise it will not sleep. True by default.
     """
     pyautogui.hotkey('win', str(icon_num))
-    pyautogui.click(333, 563, clicks=3, interval=0.15)
+    pyautogui.click(1055, 444, clicks=2, interval=0.5)
     time.sleep(2)
     pyautogui.hotkey('alt', 'tab')
     if wait:
-        time.sleep(10)
+        time.sleep(5)
 
 def create_new_projects_db(database):
     """
@@ -320,7 +320,7 @@ def get_pledge_data(bs4_tag, index=0, conversion_rate=1):
     i = str(index)
 
     pledge_data['rd_id_' + i] = bs4_tag['id']
-    pledge_data['rd_title_' + i] = bs4_tag.select_one('[class="support-700 semibold type-18 m0 mr1 text-wrap-balance break-word"]').getText().strip()
+    pledge_data['rd_title_' + i] = bs4_tag.select_one('[class="support-700 semibold kds-heading type-18 m0 mr1 text-wrap-balance break-word"]').getText().strip()
     
     pledge_data['rd_price_' + i] = get_digits(bs4_tag.select_one('[class="support-700 type-18 m0 shrink0"]').getText(), "int") * float(conversion_rate)
 
@@ -334,10 +334,10 @@ def get_pledge_data(bs4_tag, index=0, conversion_rate=1):
     # Get container with included items for pledge and then extract text from
     # every item.
     rd_list = []
-    item_list_elem = bs4_tag.select_one('[class="flex flex-column gap1"]')
+    item_list_elem = bs4_tag.select_one('[class="flex flex-column justify-between gap7"]')
     # No included items. e.g. https://www.kickstarter.com/projects/lucid-dreamers/empires-of-sorcery/rewards
     if item_list_elem != None:
-        item_elems = item_list_elem.select('[class="border border-support-700 mb3 py3 px3 radius4px clip"]')
+        item_elems = item_list_elem.select('[class="block ml-0 z3 border border2px border-white radius100p shadow-reward-avatar"]')
         for item_elem in item_elems:
             item = item_elem.getText()
             if "Quantity: 1" in item:
@@ -424,6 +424,40 @@ def get_category_data(cat_str):
     
     return (category, subcategory)
 
+def handle_captcha(driver, link):
+    """
+    Handle captcha if present by beeping and sleeping for some time (seconds).
+    Then, create a new WebDriver instance and navigate to the link again.
+    Return the new WebDriver instance.
+    """
+    max_attempts = 5
+    attempts = 0
+
+    while attempts < max_attempts:
+        # Check for CAPTCHA element
+        soup = BeautifulSoup(driver.page_source, "lxml")
+        capcha_elem = soup.select_one('div[id="px-captcha"]')
+        if capcha_elem:
+            # Beep to indicate CAPTCHA and sleep for 30 seconds
+            winsound.Beep(440, 1000)        
+            time.sleep(3)   # TODO: replace to 30
+
+            # Quit the current WebDriver instance
+            driver.quit()
+            click_random(1) # TODO: replace with global variable of VPN position
+            # Create a new WebDriver instance
+            chrome_options = uc.ChromeOptions()
+            driver = uc.Chrome(options=chrome_options, driver_executable_path=DRIVER_PATH, parse_with_lxml=True)
+            
+            # Navigate to the link again
+            driver.get(link)
+            attempts += 1
+        else:
+            break
+    
+    return driver
+
+
 def get_live_soup(link, given_driver=None, page=None):
     """Returns a bs4 soup object of the given link. Returns None if it is a deleted kickstarter account.
     
@@ -432,12 +466,7 @@ def get_live_soup(link, given_driver=None, page=None):
     False by default.
     given_driver [selenium webdriver] - A webdriver. None by default.
     page [str] - Additional behavior depending on page type."""
-    if given_driver == None:
-        driver = uc.Chrome(driver_executable_path=DRIVER_PATH, parse_with_lxml=True)
-        
-    else:
-        driver = given_driver
-    print(driver.get(link))
+    driver = given_driver
     
     driver.get(link)
 
@@ -459,6 +488,10 @@ def get_live_soup(link, given_driver=None, page=None):
                 except Exception:
                     driver.refresh()
                     tries -= 1
+                    # checks for capcha
+                    soup = BeautifulSoup(driver.page_source, "lxml")
+                    if soup.select_one('div[id="px-captcha"]') != None:
+                        driver = handle_captcha(driver, link)
                     continue
                 else:
                     break
@@ -471,12 +504,7 @@ def get_live_soup(link, given_driver=None, page=None):
         driver.quit()
         return
     
-    # If there is a capcha, Beep and sleep.
-    capcha_elem = soup.select_one('div[id="px-captcha"]')
-    if capcha_elem != None:
-        winsound.Beep(440, 1000)        
-        time.sleep(30)
-    
+        
     # # If it is a deleted account or there is a 404 error, return.
     # deleted_elem = soup.select_one('div[class="center"]')
     # non_existent_elem = soup.select_one('a[href="/?ref=404-ksr10"]')
@@ -498,12 +526,16 @@ def get_live_soup(link, given_driver=None, page=None):
                 print(f"Timed out waiting for {link} to load. Refreshing...")
                 driver.refresh()
                 tries -= 1
+                # checks for capcha
+                soup = BeautifulSoup(driver.page_source, "lxml")
+                if soup.select_one('div[id="px-captcha"]') != None:
+                    driver = handle_captcha(driver, link)
             else:
                 break
 
     soup = BeautifulSoup(driver.page_source, "lxml")
 
-    if given_driver == None:
+    if driver:
         driver.quit()
 
     return soup
@@ -518,21 +550,24 @@ def extract_campaign_data(path, conversion_rate=1):
     data = {"rd_project_link": path}
     driver = None
     try:
-        driver = uc.Chrome(driver_executable_path=DRIVER_PATH, parse_with_lxml=True)
+        chrome_options = uc.ChromeOptions()
+        driver = uc.Chrome(options=chrome_options, driver_executable_path=DRIVER_PATH, parse_with_lxml=True)
         campaign_soup = get_live_soup(path, given_driver=driver, page="campaign")
 
         # Campaign is hidden.
         if campaign_soup == None:
             return
         
+        chrome_options = uc.ChromeOptions()
+        driver = uc.Chrome(options=chrome_options, driver_executable_path=DRIVER_PATH, parse_with_lxml=True)
         reward_soup = get_live_soup(path + "/rewards", given_driver=driver, page="rewards")
         
     except WebDriverException as e:
         print(f"Error creating WebDriver from extract_campaign_data: {e}")
     
-    finally:
-        if driver:
-            driver.quit()
+    # finally: Already handled by get_live_soup
+    #     if driver:
+    #         driver.quit()
 
     # Prepare str for getting date and time. 
     path = datetime.now().strftime('_%Y%m%d-%H%M%S.html')
