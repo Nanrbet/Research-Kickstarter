@@ -16,7 +16,7 @@ Before running the program, ensure that you have the following setup:
 2. **Dependencies**: Install the required dependencies by running:
 3. **Chrome Driver**: Download the appropriate ChromeDriver executable and specify its path in the `DRIVER_PATH` variable. You can download ChromeDriver from https://chromedriver.chromium.org/downloads.
 4. **CSV Input**: Prepare a CSV file containing the URLs of Kickstarter projects to be scraped. Set the path to this CSV file in the `DATA_PATH` variable.
-5. **Json Input**: Prepare or download a JSON file containing the URLs of Kickstarter projects to be scraped. Set the path to this JSON file in the `DATA_PATH` variable.
+5. **JSON Input**: Prepare or download a JSON file containing the URLs of Kickstarter projects to be scraped. Set the path to this JSON file in the `DATA_PATH` variable.
 6. **Output Directory**: Specify the path where you want the output SQLite database to be saved in the `OUTPUT_PATH` variable.
 
 ## Configuration
